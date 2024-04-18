@@ -1,25 +1,28 @@
+use diesel::{deserialize::Queryable, Selectable};
 use uuid::Uuid;
-#[derive(Debug)]
+#[derive(Debug, Queryable, Selectable)]
+#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+#[diesel(table_name = crate::schema::transactions)]
 pub struct Transaction {
-    pub id: Uuid,
+    pub id: String,
 
     pub ticker: String,
-    pub num_sold: u32,
+    pub num_sold: i32,
     pub price: f32,
-    pub date: u32,
+    pub date: i32,
     pub description: Option<String>,
 }
 
 impl Transaction {
     pub fn new(
         ticker: String,
-        num_sold: u32,
+        num_sold: i32,
         price: f32,
-        date: u32,
+        date: i32,
         description: Option<String>,
     ) -> Transaction {
         return Transaction {
-            id: Uuid::new_v4(),
+            id: Uuid::new_v4().to_string(),
             ticker,
             num_sold,
             price,
