@@ -1,4 +1,5 @@
 // @generated automatically by Diesel CLI.
+
 diesel::table! {
     transactions (id) {
         id -> Text,
@@ -6,6 +7,6 @@ diesel::table! {
         num_sold -> Integer,
         price -> Float,
         date -> Integer,
-        description -> Nullable<Text>
+        description -> Nullable<Text>,
     }
 }

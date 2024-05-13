@@ -1,6 +1,6 @@
-use diesel::{deserialize::Queryable, Selectable};
+use diesel::{deserialize::Queryable, prelude::Insertable, Selectable};
 use uuid::Uuid;
-#[derive(Debug, Queryable, Selectable)]
+#[derive(Debug, Queryable, Selectable, Insertable)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 #[diesel(table_name = crate::schema::transactions)]
 pub struct Transaction {
