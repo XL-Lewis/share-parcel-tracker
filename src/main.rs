@@ -1,4 +1,6 @@
 mod seed;
+mod utils;
+use chrono::prelude::*;
 use csv::ReaderBuilder;
 use rusqlite::{params, Connection, Result};
 use seed::insert_sample_data;
@@ -6,7 +8,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
 use std::path::Path;
-use std::time::SystemTime;
+use utils::*;
 
 #[derive(Debug)]
 struct BuyTransaction {
@@ -47,13 +49,12 @@ fn main() -> Result<()> {
 
     println!("Connected to SQLite database");
 
+    println!("Dropping tables");
+    drop_tables(&conn)?;
+
     // Create tables for our share tracking system
     create_tables(&conn)?;
     println!("Created database tables");
-
-    // Insert some sample data
-    insert_sample_data(&conn)?;
-    println!("Inserted sample data");
 
     // Import transactions from CSV
     match import_csv_data(&conn, "transactions.csv") {
@@ -101,6 +102,14 @@ fn create_tables(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+fn drop_tables(conn: &Connection) -> Result<()> {
+    conn.execute("PRAGMA foreign_keys = OFF", [])?;
+    conn.execute("DROP TABLE IF EXISTS sell_transactions", [])?;
+    conn.execute("DROP TABLE IF EXISTS buy_transactions", [])?;
+    conn.execute("PRAGMA foreign_keys = ON", [])?;
+    Ok(())
+}
+
 fn import_csv_data(
     conn: &Connection,
     file_path: &str,
@@ -111,25 +120,6 @@ fn import_csv_data(
         .has_headers(true)
         .trim(csv::Trim::All)
         .from_reader(file);
-
-    // Map for month abbreviations to numbers
-    let month_map: HashMap<&str, u32> = [
-        ("Jan", 1),
-        ("Feb", 2),
-        ("Mar", 3),
-        ("Apr", 4),
-        ("May", 5),
-        ("Jun", 6),
-        ("Jul", 7),
-        ("Aug", 8),
-        ("Sep", 9),
-        ("Oct", 10),
-        ("Nov", 11),
-        ("Dec", 12),
-    ]
-    .iter()
-    .cloned()
-    .collect();
 
     let mut transaction_count = 0;
 
@@ -147,42 +137,7 @@ fn import_csv_data(
         }
 
         // Parse date (convert from DD/MMM/YY to YYYY-MM-DD)
-        let date_str = record[0].trim();
-        let formatted_date = if date_str.contains("/") {
-            let parts: Vec<&str> = date_str.split('/').collect();
-            if parts.len() != 3 {
-                eprintln!(
-                    "Warning: Invalid date format '{}', expected DD/MMM/YY",
-                    date_str
-                );
-                continue;
-            }
-
-            let day: u32 = parts[0].parse()?;
-            let month_abbr = parts[1];
-            let year: u32 = parts[2].parse()?;
-
-            // Convert month abbreviation to number
-            let month = if month_map.contains_key(month_abbr) {
-                month_map[month_abbr]
-            } else {
-                eprintln!("Warning: Invalid month abbreviation '{}'", month_abbr);
-                continue;
-            };
-
-            // Make sure year is in 4-digit format (20YY)
-            let full_year = if year.to_string().len() == 2 {
-                format!("20{}", year)
-            } else {
-                year.to_string()
-            };
-
-            // Format as YYYY-MM-DD
-            format!("{}-{}-{}", full_year, month, day)
-        } else {
-            // Assume it's already in a valid format
-            date_str.to_string()
-        };
+        let chrono_date = crate::utils::date_string_to_unix_i64(record[0].trim())?;
 
         let stock_id = record[1].trim().to_string();
         let shares_str = record[2].trim();
@@ -225,7 +180,7 @@ fn import_csv_data(
         };
 
         // Default fees - could be customized or added to CSV
-        let fees = 9.99;
+        let fees = 9.5;
 
         // Determine if this is a buy or sell transaction based on shares value
         if shares > 0 {
@@ -235,7 +190,7 @@ fn import_csv_data(
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
                 params![
                     stock_id,
-                    formatted_date,
+                    chrono_date,
                     shares,
                     price_per_share,
                     fees,
@@ -249,7 +204,7 @@ fn import_csv_data(
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
                 params![
                     stock_id,
-                    formatted_date,
+                    chrono_date,
                     shares.abs(), // Use absolute value for quantity
                     price_per_share,
                     fees,
@@ -299,7 +254,7 @@ fn print_transactions(conn: &Connection) -> Result<()> {
             "{:<5} {:<8} {:<12} {:<8} ${:<14.2} ${:<7.2} {}",
             buy.id,
             buy.stock_id,
-            buy.date,
+            date_unix_i64_into_string(buy.date.parse().unwrap()),
             buy.quantity,
             buy.price_per_share,
             buy.fees,
@@ -338,7 +293,7 @@ fn print_transactions(conn: &Connection) -> Result<()> {
             "{:<5} {:<8} {:<12} {:<8} ${:<14.2} ${:<7.2} {:<12} {}",
             sell.id,
             sell.stock_id,
-            sell.date,
+            date_unix_i64_into_string(sell.date.parse().unwrap()),
             sell.quantity,
             sell.price_per_share,
             sell.fees,
