@@ -92,11 +92,12 @@ Here are some ways you could extend this project:
 
 # TODO:
 
-- [ ] Hook up database
+- [X] Hook up database
+- [X] Summarize current state of stock
+- [X] Summarize all outstanding stocks
 - [ ] Link sell to buy transactions
 - [ ] Testing
-- [ ] Summarize current state of stock
-- [ ] Summarize all outstanding stocks
+- [ ] Clean up date and readme
 - [ ] UI to allow viewing of stocks
 - [ ] UI tool to select buy for associated sell
 - [ ] UI to manually set fields for a transaction
