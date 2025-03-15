@@ -1,21 +1,19 @@
-mod seed;
-mod utils;
-use chrono::prelude::*;
+mod date;
+
+use anyhow::Result;
 use csv::ReaderBuilder;
-use rusqlite::{params, Connection, Result};
-use seed::insert_sample_data;
+use date::*;
+use rusqlite::{params, Connection};
 use std::collections::HashMap;
-use std::error::Error;
 use std::fs::File;
 use std::path::Path;
-use utils::*;
 
 #[derive(Debug)]
 struct BuyTransaction {
     id: i32,
     stock_id: String,
-    date: String,
-    quantity: i32,
+    date: Date,
+    quantity: u32,
     price_per_share: f64,
     fees: f64,
     notes: Option<String>,
@@ -25,8 +23,8 @@ struct BuyTransaction {
 struct SellTransaction {
     id: i32,
     stock_id: String,
-    date: String,
-    quantity: i32,
+    date: Date,
+    quantity: u32,
     price_per_share: f64,
     fees: f64,
     linked_buy_id: Option<i32>, // Reference to the buy transaction
@@ -65,6 +63,7 @@ fn main() -> Result<()> {
     // List all transactions
     print_transactions(&conn)?;
 
+    print_current_holdings(conn)?;
     Ok(())
 }
 
@@ -110,10 +109,7 @@ fn drop_tables(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-fn import_csv_data(
-    conn: &Connection,
-    file_path: &str,
-) -> std::result::Result<usize, Box<dyn Error>> {
+fn import_csv_data(conn: &Connection, file_path: &str) -> Result<u32> {
     // Open the CSV file
     let file = File::open(file_path)?;
     let mut reader = ReaderBuilder::new()
@@ -137,7 +133,7 @@ fn import_csv_data(
         }
 
         // Parse date (convert from DD/MMM/YY to YYYY-MM-DD)
-        let chrono_date = crate::utils::date_string_to_unix_i64(record[0].trim())?;
+        let date: Date = initial_convert(record[0].to_string())?;
 
         let stock_id = record[1].trim().to_string();
         let shares_str = record[2].trim();
@@ -190,7 +186,7 @@ fn import_csv_data(
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
                 params![
                     stock_id,
-                    chrono_date,
+                    date.to_string(),
                     shares,
                     price_per_share,
                     fees,
@@ -204,7 +200,7 @@ fn import_csv_data(
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
                 params![
                     stock_id,
-                    chrono_date,
+                    date.to_string(),
                     shares.abs(), // Use absolute value for quantity
                     price_per_share,
                     fees,
@@ -221,6 +217,54 @@ fn import_csv_data(
     }
 
     Ok(transaction_count)
+}
+
+fn get_current_holdings(conn: &Connection) -> Result<HashMap<String, u32>> {
+    let mut holdings: HashMap<String, u32> = HashMap::new();
+    let mut stmt = conn.prepare(
+        "SELECT id, stock_id,  quantity
+        FROM buy_transactions
+         ORDER BY date",
+    )?;
+
+    let buy_iter = stmt.query_map([], |row| {
+        Ok((row.get::<usize, String>(1)?, row.get::<usize, u32>(2)?))
+    })?;
+
+    for buy in buy_iter {
+        let buy = buy?;
+        *holdings.entry(buy.0.to_owned()).or_insert(0) += buy.1;
+    }
+
+    let mut stmt = conn.prepare(
+        "SELECT id, stock_id,  quantity
+         FROM sell_transactions
+         ORDER BY date",
+    )?;
+
+    let sell_iter = stmt.query_map([], |row| {
+        Ok((row.get::<usize, String>(1)?, row.get::<usize, u32>(2)?))
+    })?;
+
+    for sell in sell_iter {
+        let sell = sell?;
+        *holdings.entry(sell.0.to_owned()).or_insert(0) -= sell.1;
+    }
+
+    Ok(holdings)
+}
+
+fn print_current_holdings(conn: Connection) -> Result<()> {
+    println!("--- Current Holdings ---");
+
+    println!("{:<8} {:<8}", "STOCK", "QTY");
+    let current_holdings = get_current_holdings(&conn)?;
+    current_holdings.iter().for_each(|vals| {
+        if *vals.1 > 0 {
+            println!("{:<8} {:<8}", vals.0, vals.1)
+        }
+    });
+    Ok(())
 }
 
 fn print_transactions(conn: &Connection) -> Result<()> {
@@ -240,7 +284,7 @@ fn print_transactions(conn: &Connection) -> Result<()> {
         Ok(BuyTransaction {
             id: row.get(0)?,
             stock_id: row.get(1)?,
-            date: row.get(2)?,
+            date: row.get::<usize, String>(2)?.try_into().unwrap(), // Bad
             quantity: row.get(3)?,
             price_per_share: row.get(4)?,
             fees: row.get(5)?,
@@ -248,18 +292,28 @@ fn print_transactions(conn: &Connection) -> Result<()> {
         })
     })?;
 
+    let mut old_date = Date {
+        year: 2000,
+        day: 0,
+        month: 6,
+    };
+
     for buy in buy_iter {
         let buy = buy?;
+        if next_fy(&old_date, &buy.date) {
+            println!("------- New Financial Year -------")
+        }
         println!(
             "{:<5} {:<8} {:<12} {:<8} ${:<14.2} ${:<7.2} {}",
             buy.id,
             buy.stock_id,
-            date_unix_i64_into_string(buy.date.parse().unwrap()),
+            buy.date,
             buy.quantity,
             buy.price_per_share,
             buy.fees,
             buy.notes.unwrap_or_default()
         );
+        old_date = buy.date;
     }
 
     println!("\n--- SELL TRANSACTIONS ---");
@@ -278,7 +332,7 @@ fn print_transactions(conn: &Connection) -> Result<()> {
         Ok(SellTransaction {
             id: row.get(0)?,
             stock_id: row.get(1)?,
-            date: row.get(2)?,
+            date: row.get::<usize, String>(2)?.try_into().unwrap(), // bad
             quantity: row.get(3)?,
             price_per_share: row.get(4)?,
             fees: row.get(5)?,
@@ -287,13 +341,22 @@ fn print_transactions(conn: &Connection) -> Result<()> {
         })
     })?;
 
+    let mut old_date = Date {
+        year: 2000,
+        day: 0,
+        month: 6,
+    };
+
     for sell in sell_iter {
         let sell = sell?;
+        if next_fy(&old_date, &sell.date) {
+            println!("------- New Financial Year -------")
+        }
         println!(
-            "{:<5} {:<8} {:<12} {:<8} ${:<14.2} ${:<7.2} {:<12} {}",
+            "{:<5} {:<8} {:>50} {:>8} ${:<14.2} ${:<7.2} {:<12} {}",
             sell.id,
             sell.stock_id,
-            date_unix_i64_into_string(sell.date.parse().unwrap()),
+            sell.date,
             sell.quantity,
             sell.price_per_share,
             sell.fees,
@@ -301,6 +364,7 @@ fn print_transactions(conn: &Connection) -> Result<()> {
                 .map_or("N/A".to_string(), |id| id.to_string()),
             sell.notes.unwrap_or_default()
         );
+        old_date = sell.date;
     }
 
     Ok(())
