@@ -9,35 +9,15 @@ use std::fs::File;
 use std::path::Path;
 
 #[derive(Debug)]
-struct BuyTransaction {
+struct Transaction {
     id: i32,
     stock_id: String,
     date: Date,
+    transaction_type: String, // Buy/Sell
     quantity: u32,
     price_per_share: f64,
     fees: f64,
     notes: Option<String>,
-}
-
-#[derive(Debug)]
-struct SellTransaction {
-    id: i32,
-    stock_id: String,
-    date: Date,
-    quantity: u32,
-    price_per_share: f64,
-    fees: f64,
-    linked_buy_id: Option<i32>, // Reference to the buy transaction
-    notes: Option<String>,
-}
-
-#[derive(Debug)]
-struct StockSummary {
-    symbol: String,
-    name: String,
-    total_owned: i32,
-    average_buy_price: f64,
-    current_value: f64,
 }
 
 fn main() -> Result<()> {
@@ -70,30 +50,15 @@ fn main() -> Result<()> {
 fn create_tables(conn: &Connection) -> Result<()> {
     // Create buy transactions table
     conn.execute(
-        "CREATE TABLE IF NOT EXISTS buy_transactions (
+        "CREATE TABLE IF NOT EXISTS transactions (
             id INTEGER PRIMARY KEY,
             stock_id INTEGER NOT NULL,
             date TEXT NOT NULL,
+            transaction_type INTEGER NOT NULL,
             quantity INTEGER NOT NULL,
             price_per_share REAL NOT NULL,
             fees REAL NOT NULL,
             notes TEXT
-        )",
-        [],
-    )?;
-
-    // Create sell transactions table
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS sell_transactions (
-            id INTEGER PRIMARY KEY,
-            stock_id INTEGER NOT NULL,
-            date TEXT NOT NULL,
-            quantity INTEGER NOT NULL,
-            price_per_share REAL NOT NULL,
-            fees REAL NOT NULL,
-            linked_buy_id INTEGER,
-            notes TEXT,
-            FOREIGN KEY (linked_buy_id) REFERENCES buy_transactions (id)
         )",
         [],
     )?;
@@ -103,8 +68,7 @@ fn create_tables(conn: &Connection) -> Result<()> {
 
 fn drop_tables(conn: &Connection) -> Result<()> {
     conn.execute("PRAGMA foreign_keys = OFF", [])?;
-    conn.execute("DROP TABLE IF EXISTS sell_transactions", [])?;
-    conn.execute("DROP TABLE IF EXISTS buy_transactions", [])?;
+    conn.execute("DROP TABLE IF EXISTS transactions", [])?;
     conn.execute("PRAGMA foreign_keys = ON", [])?;
     Ok(())
 }
@@ -133,7 +97,7 @@ fn import_csv_data(conn: &Connection, file_path: &str) -> Result<u32> {
         }
 
         // Parse date (convert from DD/MMM/YY to YYYY-MM-DD)
-        let date: Date = initial_convert(record[0].to_string())?;
+        let date: Date = Date::from_csv(record[0].to_string())?;
 
         let stock_id = record[1].trim().to_string();
         let shares_str = record[2].trim();
@@ -182,12 +146,13 @@ fn import_csv_data(conn: &Connection, file_path: &str) -> Result<u32> {
         if shares > 0 {
             // This is a buy transaction
             conn.execute(
-                "INSERT INTO buy_transactions (stock_id, date, quantity, price_per_share, fees, notes)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                "INSERT INTO transactions (stock_id, date, quantity, transaction_type, price_per_share, fees, notes)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
                 params![
                     stock_id,
                     date.to_string(),
                     shares,
+                    "Buy".to_string(),
                     price_per_share,
                     fees,
                     format!("Imported from CSV")
@@ -196,12 +161,13 @@ fn import_csv_data(conn: &Connection, file_path: &str) -> Result<u32> {
         } else if shares < 0 {
             // This is a sell transaction (negative shares means selling)
             conn.execute(
-                "INSERT INTO sell_transactions (stock_id, date, quantity, price_per_share, fees, notes)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                "INSERT INTO transactions (stock_id, date, quantity, transaction_type, price_per_share, fees, notes)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
                 params![
                     stock_id,
                     date.to_string(),
                     shares.abs(), // Use absolute value for quantity
+                    "Sell".to_string(),
                     price_per_share,
                     fees,
                     format!("Imported from CSV")
@@ -222,33 +188,29 @@ fn import_csv_data(conn: &Connection, file_path: &str) -> Result<u32> {
 fn get_current_holdings(conn: &Connection) -> Result<HashMap<String, u32>> {
     let mut holdings: HashMap<String, u32> = HashMap::new();
     let mut stmt = conn.prepare(
-        "SELECT id, stock_id,  quantity
-        FROM buy_transactions
+        "SELECT id, stock_id, quantity, transaction_type
+        FROM transactions
          ORDER BY date",
     )?;
 
-    let buy_iter = stmt.query_map([], |row| {
-        Ok((row.get::<usize, String>(1)?, row.get::<usize, u32>(2)?))
+    let txns = stmt.query_map([], |row| {
+        Ok((
+            row.get::<usize, String>(1)?,
+            row.get::<usize, u32>(2)?,
+            row.get::<usize, String>(3)?,
+        ))
     })?;
 
-    for buy in buy_iter {
-        let buy = buy?;
-        *holdings.entry(buy.0.to_owned()).or_insert(0) += buy.1;
-    }
-
-    let mut stmt = conn.prepare(
-        "SELECT id, stock_id,  quantity
-         FROM sell_transactions
-         ORDER BY date",
-    )?;
-
-    let sell_iter = stmt.query_map([], |row| {
-        Ok((row.get::<usize, String>(1)?, row.get::<usize, u32>(2)?))
-    })?;
-
-    for sell in sell_iter {
-        let sell = sell?;
-        *holdings.entry(sell.0.to_owned()).or_insert(0) -= sell.1;
+    for txn in txns {
+        let txn = txn?;
+        match txn.2.as_str() {
+            "Buy" => *holdings.entry(txn.0.to_owned()).or_insert(0) += txn.1,
+            "Sell" => *holdings.entry(txn.0.to_owned()).or_insert(0) -= txn.1,
+            _ => println!(
+                "Failed to handle tnansaction in get_current_holdings! {:?}",
+                txn
+            ),
+        }
     }
 
     Ok(holdings)
@@ -276,15 +238,17 @@ fn print_transactions(conn: &Connection) -> Result<()> {
 
     let mut stmt = conn.prepare(
         "SELECT id, stock_id, date, quantity, price_per_share, fees, notes
-         FROM buy_transactions
-         ORDER BY date",
+        FROM transactions
+        WHERE transaction_type='Sell'
+        ORDER BY date",
     )?;
 
     let buy_iter = stmt.query_map([], |row| {
-        Ok(BuyTransaction {
+        Ok(Transaction {
             id: row.get(0)?,
             stock_id: row.get(1)?,
             date: row.get::<usize, String>(2)?.try_into().unwrap(), // Bad
+            transaction_type: "Buy".to_string(),
             quantity: row.get(3)?,
             price_per_share: row.get(4)?,
             fees: row.get(5)?,
@@ -300,7 +264,7 @@ fn print_transactions(conn: &Connection) -> Result<()> {
 
     for buy in buy_iter {
         let buy = buy?;
-        if next_fy(&old_date, &buy.date) {
+        if Date::in_same_fy(&old_date, &buy.date) {
             println!("------- New Financial Year -------")
         }
         println!(
@@ -323,21 +287,22 @@ fn print_transactions(conn: &Connection) -> Result<()> {
     );
 
     let mut stmt = conn.prepare(
-        "SELECT id, stock_id, date, quantity, price_per_share, fees, linked_buy_id, notes
-         FROM sell_transactions
+        "SELECT id, stock_id, date, quantity, price_per_share, fees, notes
+         FROM transactions
+         WHERE transaction_type='Sell'
          ORDER BY date",
     )?;
 
     let sell_iter = stmt.query_map([], |row| {
-        Ok(SellTransaction {
+        Ok(Transaction {
             id: row.get(0)?,
             stock_id: row.get(1)?,
             date: row.get::<usize, String>(2)?.try_into().unwrap(), // bad
+            transaction_type: "Sell".to_string(),
             quantity: row.get(3)?,
             price_per_share: row.get(4)?,
             fees: row.get(5)?,
-            linked_buy_id: row.get(6)?,
-            notes: row.get(7)?,
+            notes: row.get(6)?,
         })
     })?;
 
@@ -349,23 +314,23 @@ fn print_transactions(conn: &Connection) -> Result<()> {
 
     for sell in sell_iter {
         let sell = sell?;
-        if next_fy(&old_date, &sell.date) {
+        if Date::in_same_fy(&old_date, &sell.date) {
             println!("------- New Financial Year -------")
         }
+
         println!(
-            "{:<5} {:<8} {:>50} {:>8} ${:<14.2} ${:<7.2} {:<12} {}",
+            "{:<5} {:<8} {:>50} {:>8} ${:<14.2} ${:<7.2} {}",
             sell.id,
             sell.stock_id,
             sell.date,
             sell.quantity,
             sell.price_per_share,
             sell.fees,
-            sell.linked_buy_id
-                .map_or("N/A".to_string(), |id| id.to_string()),
             sell.notes.unwrap_or_default()
         );
         old_date = sell.date;
     }
+    println!("Here!");
 
     Ok(())
 }

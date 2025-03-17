@@ -22,54 +22,7 @@ A basic Rust application demonstrating SQLite integration using the `rusqlite` c
 cargo run
 ```
 
-This will:
-1. Create an SQLite database file named `parcels.db` if it doesn't exist
-2. Create a `parcels` table if it doesn't exist
-3. Insert sample parcel data
-4. Query and display all parcels
-5. Query and display parcels being sent to Sydney
 
-## Project Structure
-
-- `src/main.rs`: Contains all the code for the application
-- `parcels.db`: SQLite database file (created when you run the application)
-
-## SQLite Operations Demonstrated
-
-1. **Connecting to a database**:
-   ```rust
-   let conn = Connection::open("parcels.db")?;
-   ```
-
-2. **Creating tables**:
-   ```rust
-   conn.execute(
-       "CREATE TABLE IF NOT EXISTS parcels (
-           id INTEGER PRIMARY KEY,
-           tracking_number TEXT NOT NULL,
-           ...
-       )",
-       [],
-   )?;
-   ```
-
-3. **Inserting data**:
-   ```rust
-   conn.execute(
-       "INSERT OR REPLACE INTO parcels VALUES (?1, ?2, ?3, ?4, ?5)",
-       params![parcel.id, parcel.tracking_number, /* ... */],
-   )?;
-   ```
-
-4. **Querying data**:
-   ```rust
-   let mut stmt = conn.prepare("SELECT * FROM parcels")?;
-   let results = stmt.query_map([], |row| { /* ... */ })?;
-   ```
-
-5. **Parameterized queries**:
-   ```rust
-   stmt.query_map(["Sydney"], |row| { /* ... */ })?;
    ```
 
 ## Next Steps
@@ -101,7 +54,7 @@ Here are some ways you could extend this project:
 - [ ] UI to allow viewing of stocks
 - [ ] UI tool to select buy for associated sell
 - [ ] UI to manually set fields for a transaction
-
+- [ ] Fifo auto
 
 
 # share-parcel-tracker
