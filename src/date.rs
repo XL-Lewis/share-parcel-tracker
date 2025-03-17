@@ -47,14 +47,14 @@ impl Date {
     pub fn in_same_fy(old_date: &Date, new_date: &Date) -> bool {
         let old_fy = Self::which_fy(old_date);
         let new_fy = Self::which_fy(new_date);
-        !old_fy == new_fy
+        old_fy != new_fy // Fixed logic - returns true if they're in different FYs
     }
 
     /// Returns the financial year that a particular date is set in
-    /// This is the that that FY STARTED in
+    /// This is the year that FY STARTED in
     /// i.e. july 1 2024 -> 2024
-    /// jan 15 2024 -> 2024
-    fn which_fy(date: &Date) -> u32 {
+    /// jan 15 2024 -> 2023 (July 1, 2023 - June 30, 2024)
+    pub fn which_fy(date: &Date) -> u32 {
         match date.month {
             7..=12 => date.year,
             1..=6 => date.year - 1,
@@ -67,10 +67,7 @@ impl Date {
 impl std::fmt::Display for Date {
     // This trait requires `fmt` with this exact signature.
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        // Write strictly the first element into the supplied output
-        // stream: `f`. Returns `fmt::Result` which indicates whether the
-        // operation succeeded or failed. Note that `write!` uses syntax which
-        // is very similar to `println!`.
-        write!(f, "{:0>2}-{:0>2}-{:0>2}", self.year, self.month, self.day)
+        // In the database, we're storing dates in DD-MM-YY format
+        write!(f, "{:0>2}-{:0>2}-{:0>2}", self.day, self.month, self.year)
     }
 }
