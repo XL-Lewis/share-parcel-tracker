@@ -98,14 +98,14 @@ fn generate_capital_gains_summary(conn: &Connection, fy: &str) -> Result<Capital
     let end_year: u32 = parts[1].parse()?;
 
     // Query to get all sell allocations in the specified financial year
-    // Our dates are stored as "DD-MM-YY" format, so we need to extract year and month carefully
+    // Using SQLite date functions with ISO-8601 format (YYYY-MM-DD)
     let mut stmt = conn.prepare(
         "SELECT sa.capital_gain, sa.cgt_discount_applied
          FROM sell_allocations sa
          JOIN sell_transactions st ON sa.sell_transaction_id = st.id
          WHERE
-            (CAST(substr(st.date, 7, 2) AS INTEGER) + 2000 = ?1 AND CAST(substr(st.date, 4, 2) AS INTEGER) >= 7) OR
-            (CAST(substr(st.date, 7, 2) AS INTEGER) + 2000 = ?2 AND CAST(substr(st.date, 4, 2) AS INTEGER) <= 6)"
+            (strftime('%Y', st.date) = ?1 AND strftime('%m', st.date) >= '07') OR
+            (strftime('%Y', st.date) = ?2 AND strftime('%m', st.date) <= '06')",
     )?;
 
     println!("Querying capital gains for FY {}-{}", start_year, end_year);
@@ -173,7 +173,7 @@ fn print_capital_gains_summary(conn: &Connection, fy: &str) -> Result<()> {
     let start_year: u32 = parts[0].parse()?;
     let end_year: u32 = parts[1].parse()?;
 
-    // Query to get capital gains per stock
+    // Query to get capital gains per stock using SQLite date functions
     let mut stmt = conn.prepare(
         "SELECT
             bt.stock_id,
@@ -184,8 +184,8 @@ fn print_capital_gains_summary(conn: &Connection, fy: &str) -> Result<()> {
          JOIN buy_transactions bt ON sa.buy_transaction_id = bt.id
          JOIN sell_transactions st ON sa.sell_transaction_id = st.id
          WHERE
-            (CAST(substr(st.date, 7, 2) AS INTEGER) + 2000 = ?1 AND CAST(substr(st.date, 4, 2) AS INTEGER) >= 7) OR
-            (CAST(substr(st.date, 7, 2) AS INTEGER) + 2000 = ?2 AND CAST(substr(st.date, 4, 2) AS INTEGER) <= 6)
+            (strftime('%Y', st.date) = ?1 AND strftime('%m', st.date) >= '07') OR
+            (strftime('%Y', st.date) = ?2 AND strftime('%m', st.date) <= '06')
          GROUP BY bt.stock_id
          ORDER BY bt.stock_id"
     )?;
@@ -269,7 +269,7 @@ fn create_tables(conn: &Connection) -> Result<()> {
         "CREATE TABLE IF NOT EXISTS buy_transactions (
             id INTEGER PRIMARY KEY,
             stock_id TEXT NOT NULL,
-            date TEXT NOT NULL,
+            date TEXT NOT NULL, -- ISO-8601 format: YYYY-MM-DD
             quantity INTEGER NOT NULL,
             price_per_share REAL NOT NULL,
             fees REAL NOT NULL,
@@ -284,7 +284,7 @@ fn create_tables(conn: &Connection) -> Result<()> {
         "CREATE TABLE IF NOT EXISTS sell_transactions (
             id INTEGER PRIMARY KEY,
             stock_id TEXT NOT NULL,
-            date TEXT NOT NULL,
+            date TEXT NOT NULL, -- ISO-8601 format: YYYY-MM-DD
             quantity INTEGER NOT NULL,
             price_per_share REAL NOT NULL,
             fees REAL NOT NULL,
@@ -347,8 +347,8 @@ fn import_csv_data(conn: &Connection, file_path: &str) -> Result<u32> {
             continue;
         }
 
-        // Parse date (convert from DD/MMM/YY to YYYY-MM-DD)
-        let date: Date = Date::from_csv(record[0].to_string())?;
+        // Parse date from DD/MMM/YY format in CSV to YYYY-MM-DD
+        let date: Date = Date::from_csv(&record[0])?;
 
         let symbol = record[1].trim().to_string();
         let shares_str = record[2].trim();
@@ -483,10 +483,7 @@ fn allocate_sell_transaction_fifo(conn: &Connection, sell_transaction_id: i32) -
          (SELECT COALESCE(SUM(sa.quantity), 0) FROM sell_allocations sa WHERE sa.buy_transaction_id = bt.id) as allocated
          FROM buy_transactions bt
          WHERE bt.stock_id = ?1
-         ORDER BY
-            CAST(substr(bt.date, 7, 2) AS INTEGER), -- Year
-            CAST(substr(bt.date, 4, 2) AS INTEGER), -- Month
-            CAST(substr(bt.date, 1, 2) AS INTEGER)" // FIFO - oldest first by date components
+         ORDER BY bt.date" // FIFO - oldest first, ISO format sorts chronologically
     )?;
 
     // Get all buy transactions for this stock
@@ -584,16 +581,9 @@ fn allocate_sell_transaction_fifo(conn: &Connection, sell_transaction_id: i32) -
 }
 
 // Check if a transaction is eligible for CGT discount (held for more than 1 year)
+// This function is now handled by Date::is_eligible_for_cgt_discount
 fn is_eligible_for_cgt_discount(buy_date: &Date, sell_date: &Date) -> bool {
-    // For simplicity, just check if the years differ by more than 1,
-    // or if they differ by exactly 1 and the sell month/day is greater than or equal to buy month/day
-    if sell_date.year > buy_date.year + 1 {
-        return true;
-    } else if sell_date.year == buy_date.year + 1 {
-        return (sell_date.month > buy_date.month)
-            || (sell_date.month == buy_date.month && sell_date.day >= buy_date.day);
-    }
-    false
+    Date::is_eligible_for_cgt_discount(buy_date, sell_date)
 }
 
 fn get_current_holdings(conn: &Connection) -> Result<HashMap<String, u32>> {
@@ -652,14 +642,11 @@ fn print_transactions(conn: &Connection) -> Result<()> {
         "ID", "STOCK", "DATE", "QTY", "PRICE/SHARE", "FEES", "NOTES"
     );
 
-    // Query buy transactions - order chronologically by date components in DD-MM-YY format
+    // Query buy transactions - sort chronologically using ISO-8601 format
     let mut stmt = conn.prepare(
         "SELECT id, stock_id, date, quantity, price_per_share, fees, notes
         FROM buy_transactions
-        ORDER BY
-            CAST(substr(date, 7, 2) AS INTEGER), -- Year
-            CAST(substr(date, 4, 2) AS INTEGER), -- Month
-            CAST(substr(date, 1, 2) AS INTEGER)  -- Day",
+        ORDER BY date",
     )?;
 
     let buy_iter = stmt.query_map([], |row| {
@@ -674,21 +661,16 @@ fn print_transactions(conn: &Connection) -> Result<()> {
         })
     })?;
 
-    let mut old_date = Date {
-        year: 2000,
-        day: 0,
-        month: 6,
-    };
+    let mut old_date = Date::dummy();
 
     for buy in buy_iter {
         let buy = buy?;
         // Check if we're entering a new financial year
-        if old_date.year > 0 && Date::which_fy(&old_date) != Date::which_fy(&buy.date) {
-            let fy_start = 2000 + Date::which_fy(&buy.date);
+        if old_date.year() > 0 && Date::which_fy(&old_date) != Date::which_fy(&buy.date) {
+            let fy_start = Date::which_fy(&buy.date);
             println!(
-                "------- New Financial Year: {}-{} -------",
-                fy_start,
-                fy_start + 1
+                "------- New Financial Year: {} -------",
+                Date::format_fy(fy_start)
             );
         }
         println!(
@@ -710,14 +692,11 @@ fn print_transactions(conn: &Connection) -> Result<()> {
         "ID", "STOCK", "DATE", "QTY", "PRICE/SHARE", "FEES", "NOTES"
     );
 
-    // Query sell transactions - order chronologically by date components in DD-MM-YY format
+    // Query sell transactions - sort chronologically using ISO-8601 format
     let mut stmt = conn.prepare(
         "SELECT id, stock_id, date, quantity, price_per_share, fees, notes
          FROM sell_transactions
-         ORDER BY
-            CAST(substr(date, 7, 2) AS INTEGER), -- Year
-            CAST(substr(date, 4, 2) AS INTEGER), -- Month
-            CAST(substr(date, 1, 2) AS INTEGER)  -- Day",
+         ORDER BY date",
     )?;
 
     let sell_iter = stmt.query_map([], |row| {
@@ -732,21 +711,16 @@ fn print_transactions(conn: &Connection) -> Result<()> {
         })
     })?;
 
-    old_date = Date {
-        year: 2000,
-        day: 0,
-        month: 6,
-    };
+    old_date = Date::dummy();
 
     for sell in sell_iter {
         let sell = sell?;
         // Check if we're entering a new financial year
-        if old_date.year > 0 && Date::which_fy(&old_date) != Date::which_fy(&sell.date) {
-            let fy_start = 2000 + Date::which_fy(&sell.date);
+        if old_date.year() > 0 && Date::which_fy(&old_date) != Date::which_fy(&sell.date) {
+            let fy_start = Date::which_fy(&sell.date);
             println!(
-                "------- New Financial Year: {}-{} -------",
-                fy_start,
-                fy_start + 1
+                "------- New Financial Year: {} -------",
+                Date::format_fy(fy_start)
             );
         }
 
