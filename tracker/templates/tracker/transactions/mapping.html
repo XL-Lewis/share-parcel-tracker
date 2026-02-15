@@ -1,0 +1,70 @@
+{% extends "tracker/base.html" %}
+{% block title %}Map Columns - Tax Tracker{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+  <h1 class="text-2xl font-bold text-gray-900">Map CSV Columns</h1>
+  <p class="mt-1 text-sm text-gray-500">Map each CSV column to its corresponding field. Leave unmapped columns as "-- skip --".</p>
+</div>
+
+<!-- Sample data preview -->
+{% if sample_rows %}
+<div class="bg-white shadow rounded-lg mb-6 overflow-x-auto">
+  <div class="px-4 py-3 border-b border-gray-200">
+    <h2 class="text-sm font-medium text-gray-700">Sample Data (first {{ sample_rows|length }} rows)</h2>
+  </div>
+  <table class="min-w-full divide-y divide-gray-200 text-xs">
+    <thead class="bg-gray-50">
+      <tr>
+        {% for header in headers %}
+        <th class="px-3 py-2 text-left font-medium text-gray-500 uppercase tracking-wider">{{ header }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody class="bg-white divide-y divide-gray-200">
+      {% for row in sample_rows %}
+      <tr>
+        {% for header in headers %}
+        <td class="px-3 py-2 whitespace-nowrap text-gray-600">{{ row|dictsort:header }}{% for k, v in row.items %}{% if k == header %}{{ v }}{% endif %}{% endfor %}</td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<!-- Mapping form -->
+<div class="bg-white shadow rounded-lg p-6 max-w-2xl">
+  <form method="post">
+    {% csrf_token %}
+
+    <div class="space-y-4">
+      {% for field in form %}
+      <div class="flex items-center gap-4">
+        <label for="{{ field.id_for_label }}" class="w-48 text-sm font-medium text-gray-700 truncate">
+          {{ field.label }}
+        </label>
+        <select name="{{ field.html_name }}" id="{{ field.id_for_label }}"
+                class="flex-1 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm py-2 px-3 border">
+          {% for value, label in field.field.choices %}
+          <option value="{{ value }}" {% if field.value == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="mt-6 flex gap-3">
+      <button type="submit"
+              class="inline-flex items-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500">
+        Preview Import
+      </button>
+      <a href="{% url 'tracker:csv_upload' %}"
+         class="inline-flex items-center rounded-md bg-white px-4 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50">
+        Back
+      </a>
+    </div>
+  </form>
+</div>
+{% endblock %}

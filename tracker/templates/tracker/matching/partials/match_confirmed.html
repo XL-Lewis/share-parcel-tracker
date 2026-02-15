@@ -1,0 +1,55 @@
+{% if error %}
+<div class="rounded-md bg-red-50 p-4">
+  <p class="text-sm text-red-800">{{ error }}</p>
+</div>
+{% elif matches %}
+<div class="rounded-md bg-green-50 p-4 mb-4">
+  <div class="flex">
+    <svg class="h-5 w-5 text-green-400 mr-2 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd" />
+    </svg>
+    <p class="text-sm text-green-800 font-medium">
+      Successfully matched {{ matches|length }} parcel{{ matches|length|pluralize }} for {{ sell.security.ticker }}.
+    </p>
+  </div>
+</div>
+
+<div class="overflow-x-auto">
+  <table class="min-w-full divide-y divide-gray-200 text-sm">
+    <thead class="bg-gray-50">
+      <tr>
+        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Parcel Date</th>
+        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Qty</th>
+        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Net Gain</th>
+        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Days Held</th>
+        <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Discount</th>
+      </tr>
+    </thead>
+    <tbody class="bg-white divide-y divide-gray-200">
+      {% for m in matches %}
+      <tr>
+        <td class="px-3 py-2 whitespace-nowrap">{{ m.parcel.acquisition_date }}</td>
+        <td class="px-3 py-2 whitespace-nowrap text-right">{{ m.matched_quantity }}</td>
+        <td class="px-3 py-2 whitespace-nowrap text-right font-medium {% if m.net_capital_gain >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
+          ${{ m.net_capital_gain|floatformat:2 }}
+        </td>
+        <td class="px-3 py-2 whitespace-nowrap text-right">{{ m.holding_period_days }}</td>
+        <td class="px-3 py-2 whitespace-nowrap text-center">
+          {% if m.cgt_discount_eligible %}
+          <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800">50%</span>
+          {% else %}
+          <span class="text-gray-400">-</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="mt-4">
+  <a href="{% url 'tracker:transaction_detail' sell.pk %}" class="text-sm text-indigo-600 hover:text-indigo-500">
+    View Transaction Details &rarr;
+  </a>
+</div>
+{% endif %}

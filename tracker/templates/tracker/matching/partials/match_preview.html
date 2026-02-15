@@ -1,0 +1,61 @@
+{% if error %}
+<div class="rounded-md bg-red-50 p-4">
+  <p class="text-sm text-red-800">{{ error }}</p>
+</div>
+{% elif matches %}
+<div class="rounded-md bg-blue-50 p-4 mb-4">
+  <p class="text-sm text-blue-800 font-medium">Match Preview ({{ strategy|upper }}) &mdash; Review before confirming</p>
+</div>
+
+<div class="overflow-x-auto mb-4">
+  <table class="min-w-full divide-y divide-gray-200 text-sm">
+    <thead class="bg-gray-50">
+      <tr>
+        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Parcel Date</th>
+        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Qty</th>
+        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Cost Base</th>
+        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Proceeds</th>
+        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Gain/Loss</th>
+        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Days Held</th>
+        <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Discount</th>
+        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Net Gain</th>
+      </tr>
+    </thead>
+    <tbody class="bg-white divide-y divide-gray-200">
+      {% for m in matches %}
+      <tr>
+        <td class="px-3 py-2 whitespace-nowrap">{{ m.parcel.acquisition_date }}</td>
+        <td class="px-3 py-2 whitespace-nowrap text-right">{{ m.matched_quantity }}</td>
+        <td class="px-3 py-2 whitespace-nowrap text-right">${{ m.cost_base_aud|floatformat:2 }}</td>
+        <td class="px-3 py-2 whitespace-nowrap text-right">${{ m.proceeds_aud|floatformat:2 }}</td>
+        <td class="px-3 py-2 whitespace-nowrap text-right {% if m.capital_gain_loss >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
+          ${{ m.capital_gain_loss|floatformat:2 }}
+        </td>
+        <td class="px-3 py-2 whitespace-nowrap text-right">{{ m.holding_period_days }}</td>
+        <td class="px-3 py-2 whitespace-nowrap text-center">
+          {% if m.cgt_discount_eligible %}
+          <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800">50%</span>
+          {% else %}
+          <span class="text-gray-400">-</span>
+          {% endif %}
+        </td>
+        <td class="px-3 py-2 whitespace-nowrap text-right font-medium {% if m.net_capital_gain >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
+          ${{ m.net_capital_gain|floatformat:2 }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<button hx-post="{% url 'tracker:confirm_match' sell.pk %}"
+        hx-target="#match-result-{{ sell.pk }}"
+        hx-swap="innerHTML"
+        class="rounded-md bg-green-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-green-500">
+  Confirm Matches
+</button>
+<button onclick="this.closest('[id^=match-result]').innerHTML = ''"
+        class="ml-2 rounded-md bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50">
+  Cancel
+</button>
+{% endif %}

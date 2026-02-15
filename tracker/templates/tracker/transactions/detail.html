@@ -1,0 +1,190 @@
+{% extends "tracker/base.html" %}
+{% block title %}Transaction #{{ txn.pk }} - Tax Tracker{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+  <div class="flex items-center gap-3">
+    <a href="{% url 'tracker:transaction_list' %}" class="text-indigo-600 hover:text-indigo-500 text-sm">&larr; Back to Transactions</a>
+  </div>
+  <h1 class="mt-3 text-2xl font-bold text-gray-900">
+    Transaction #{{ txn.pk }}
+    <span class="inline-flex items-center rounded-full px-3 py-1 text-sm font-medium ml-2 {% if txn.transaction_type == 'BUY' %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">
+      {{ txn.transaction_type }}
+    </span>
+  </h1>
+</div>
+
+<!-- Transaction details -->
+<div class="bg-white shadow rounded-lg mb-6">
+  <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+    <h2 class="text-lg font-medium text-gray-900">Transaction Details</h2>
+  </div>
+  <div class="px-4 py-5 sm:px-6">
+    <dl class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-3">
+      <div>
+        <dt class="text-sm font-medium text-gray-500">Security</dt>
+        <dd class="mt-1 text-sm text-gray-900 font-semibold">{{ txn.security.ticker }}</dd>
+      </div>
+      <div>
+        <dt class="text-sm font-medium text-gray-500">Trade Date</dt>
+        <dd class="mt-1 text-sm text-gray-900">{{ txn.trade_date }}</dd>
+      </div>
+      <div>
+        <dt class="text-sm font-medium text-gray-500">Quantity</dt>
+        <dd class="mt-1 text-sm text-gray-900">{{ txn.quantity }}</dd>
+      </div>
+      <div>
+        <dt class="text-sm font-medium text-gray-500">Unit Price</dt>
+        <dd class="mt-1 text-sm text-gray-900">${{ txn.unit_price }}</dd>
+      </div>
+      <div>
+        <dt class="text-sm font-medium text-gray-500">Brokerage</dt>
+        <dd class="mt-1 text-sm text-gray-900">${{ txn.brokerage }}</dd>
+      </div>
+      <div>
+        <dt class="text-sm font-medium text-gray-500">Total Value</dt>
+        <dd class="mt-1 text-sm text-gray-900 font-semibold">${{ txn.total_value }}</dd>
+      </div>
+      <div>
+        <dt class="text-sm font-medium text-gray-500">Currency</dt>
+        <dd class="mt-1 text-sm text-gray-900">{{ txn.currency }}</dd>
+      </div>
+      <div>
+        <dt class="text-sm font-medium text-gray-500">Exchange Rate</dt>
+        <dd class="mt-1 text-sm text-gray-900">{{ txn.exchange_rate }}</dd>
+      </div>
+      {% if txn.import_record %}
+      <div>
+        <dt class="text-sm font-medium text-gray-500">Import Source</dt>
+        <dd class="mt-1 text-sm text-gray-900">{{ txn.import_record.filename }}</dd>
+      </div>
+      {% endif %}
+    </dl>
+  </div>
+</div>
+
+<!-- Linked Parcel (BUY transactions) -->
+{% if parcel %}
+<div class="bg-white shadow rounded-lg mb-6">
+  <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+    <h2 class="text-lg font-medium text-gray-900">Linked Parcel</h2>
+  </div>
+  <div class="px-4 py-5 sm:px-6">
+    <dl class="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-3">
+      <div>
+        <dt class="text-sm font-medium text-gray-500">Acquisition Date</dt>
+        <dd class="mt-1 text-sm text-gray-900">{{ parcel.acquisition_date }}</dd>
+      </div>
+      <div>
+        <dt class="text-sm font-medium text-gray-500">Original Quantity</dt>
+        <dd class="mt-1 text-sm text-gray-900">{{ parcel.original_quantity }}</dd>
+      </div>
+      <div>
+        <dt class="text-sm font-medium text-gray-500">Remaining Quantity</dt>
+        <dd class="mt-1 text-sm text-gray-900">{{ parcel.remaining_quantity }}</dd>
+      </div>
+      <div>
+        <dt class="text-sm font-medium text-gray-500">Cost Per Unit (AUD)</dt>
+        <dd class="mt-1 text-sm text-gray-900">${{ parcel.cost_per_unit_aud|floatformat:4 }}</dd>
+      </div>
+      <div>
+        <dt class="text-sm font-medium text-gray-500">Total Cost Base (AUD)</dt>
+        <dd class="mt-1 text-sm text-gray-900 font-semibold">${{ parcel.total_cost_base_aud|floatformat:2 }}</dd>
+      </div>
+      <div>
+        <dt class="text-sm font-medium text-gray-500">Status</dt>
+        <dd class="mt-1">
+          {% if parcel.is_fully_matched %}
+          <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-green-100 text-green-800">Fully Matched</span>
+          {% else %}
+          <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800">Partially Available</span>
+          {% endif %}
+        </dd>
+      </div>
+    </dl>
+    <div class="mt-4">
+      <a href="{% url 'tracker:parcel_detail' parcel.pk %}" class="text-sm text-indigo-600 hover:text-indigo-500">View Parcel Details &rarr;</a>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Linked Matches (SELL transactions) -->
+{% if matches %}
+<div class="bg-white shadow rounded-lg mb-6">
+  <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+    <h2 class="text-lg font-medium text-gray-900">Parcel Matches</h2>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="min-w-full divide-y divide-gray-200 text-sm">
+      <thead class="bg-gray-50">
+        <tr>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Parcel</th>
+          <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Matched Qty</th>
+          <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Cost Base</th>
+          <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Proceeds</th>
+          <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Gain/Loss</th>
+          <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Holding Days</th>
+          <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Discount</th>
+          <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Net Gain</th>
+        </tr>
+      </thead>
+      <tbody class="bg-white divide-y divide-gray-200">
+        {% for m in matches %}
+        <tr class="hover:bg-gray-50">
+          <td class="px-4 py-3 whitespace-nowrap">
+            <a href="{% url 'tracker:parcel_detail' m.parcel.pk %}" class="text-indigo-600 hover:text-indigo-500">
+              {{ m.parcel.acquisition_date }} ({{ m.parcel.security.ticker }})
+            </a>
+          </td>
+          <td class="px-4 py-3 whitespace-nowrap text-right">{{ m.matched_quantity }}</td>
+          <td class="px-4 py-3 whitespace-nowrap text-right">${{ m.cost_base_aud|floatformat:2 }}</td>
+          <td class="px-4 py-3 whitespace-nowrap text-right">${{ m.proceeds_aud|floatformat:2 }}</td>
+          <td class="px-4 py-3 whitespace-nowrap text-right {% if m.capital_gain_loss >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
+            ${{ m.capital_gain_loss|floatformat:2 }}
+          </td>
+          <td class="px-4 py-3 whitespace-nowrap text-right">{{ m.holding_period_days }}</td>
+          <td class="px-4 py-3 whitespace-nowrap text-center">
+            {% if m.cgt_discount_eligible %}
+            <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800">50%</span>
+            {% else %}
+            <span class="text-gray-400">-</span>
+            {% endif %}
+          </td>
+          <td class="px-4 py-3 whitespace-nowrap text-right font-medium {% if m.net_capital_gain >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
+            ${{ m.net_capital_gain|floatformat:2 }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% elif txn.transaction_type == 'SELL' %}
+<div class="bg-yellow-50 rounded-lg p-4 mb-6">
+  <p class="text-sm text-yellow-800">
+    This sell transaction has not been matched to any parcels yet.
+    <a href="{% url 'tracker:unmatched_sells' %}" class="font-medium underline">Go to Matching</a>
+  </p>
+</div>
+{% endif %}
+
+<!-- Raw data -->
+{% if txn.raw_data %}
+<div class="bg-white shadow rounded-lg">
+  <div class="px-4 py-5 sm:px-6 border-b border-gray-200">
+    <h2 class="text-lg font-medium text-gray-900">Raw Import Data</h2>
+  </div>
+  <div class="px-4 py-5 sm:px-6">
+    <dl class="grid grid-cols-1 gap-y-2 sm:grid-cols-2">
+      {% for key, value in txn.raw_data.items %}
+      <div class="sm:col-span-1">
+        <dt class="text-xs font-medium text-gray-500">{{ key }}</dt>
+        <dd class="text-sm text-gray-900">{{ value }}</dd>
+      </div>
+      {% endfor %}
+    </dl>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

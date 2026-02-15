@@ -1,0 +1,101 @@
+{% extends "tracker/base.html" %}
+{% block title %}Match Sells - Tax Tracker{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+  <h1 class="text-2xl font-bold text-gray-900">Match Sell Transactions</h1>
+  <p class="mt-1 text-sm text-gray-500">Select a sell transaction to match against your buy parcels.</p>
+</div>
+
+{% if unmatched_sells %}
+<div class="space-y-4">
+  {% for item in unmatched_sells %}
+  <div class="bg-white shadow rounded-lg" x-data="{ open: false }">
+    <div class="px-4 py-4 sm:px-6 flex items-center justify-between cursor-pointer hover:bg-gray-50"
+         @click="open = !open">
+      <div class="flex items-center gap-4">
+        <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-red-100 text-red-800">SELL</span>
+        <span class="text-sm font-semibold text-gray-900">{{ item.transaction.security.ticker }}</span>
+        <span class="text-sm text-gray-500">{{ item.transaction.trade_date }}</span>
+        <span class="text-sm text-gray-500">{{ item.transaction.quantity }} units @ ${{ item.transaction.unit_price }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        {% if item.matched_qty > 0 %}
+        <span class="text-xs text-yellow-600">{{ item.matched_qty }}/{{ item.transaction.quantity }} matched</span>
+        {% endif %}
+        <svg class="h-5 w-5 text-gray-400 transition-transform" :class="{ 'rotate-180': open }" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+        </svg>
+      </div>
+    </div>
+
+    <!-- Expanded matching panel -->
+    <div x-show="open" x-cloak class="border-t border-gray-200">
+      <div class="p-4 sm:px-6">
+        <!-- Available parcels loaded via HTMX -->
+        <div id="parcels-{{ item.transaction.pk }}"
+             hx-get="{% url 'tracker:available_parcels' item.transaction.pk %}"
+             hx-trigger="intersect once"
+             hx-swap="innerHTML">
+          <div class="text-center py-4 text-gray-400 text-sm">Loading available parcels...</div>
+        </div>
+
+        <!-- Match controls -->
+        <div class="flex gap-3 mt-4 border-t pt-4">
+          <button hx-post="{% url 'tracker:auto_match' item.transaction.pk %}"
+                  hx-vals='{"strategy": "fifo"}'
+                  hx-target="#match-result-{{ item.transaction.pk }}"
+                  hx-swap="innerHTML"
+                  class="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500">
+            Auto FIFO
+          </button>
+          <button hx-post="{% url 'tracker:auto_match' item.transaction.pk %}"
+                  hx-vals='{"strategy": "lifo"}'
+                  hx-target="#match-result-{{ item.transaction.pk }}"
+                  hx-swap="innerHTML"
+                  class="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500">
+            Auto LIFO
+          </button>
+          <button @click="document.getElementById('manual-form-{{ item.transaction.pk }}').classList.toggle('hidden')"
+                  class="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50">
+            Manual Match
+          </button>
+        </div>
+
+        <!-- Manual match form (hidden by default) -->
+        <div id="manual-form-{{ item.transaction.pk }}" class="hidden mt-4">
+          <form hx-post="{% url 'tracker:manual_match' item.transaction.pk %}"
+                hx-target="#match-result-{{ item.transaction.pk }}"
+                hx-swap="innerHTML">
+            {% csrf_token %}
+            <div id="manual-parcels-{{ item.transaction.pk }}"
+                 hx-get="{% url 'tracker:available_parcels' item.transaction.pk %}"
+                 hx-trigger="intersect once"
+                 hx-swap="innerHTML"
+                 hx-vals='{"manual": "1"}'>
+            </div>
+            <div class="mt-3">
+              <button type="submit" class="rounded-md bg-green-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-green-500">
+                Preview Manual Match
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Match results area -->
+        <div id="match-result-{{ item.transaction.pk }}" class="mt-4"></div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-12 bg-white shadow rounded-lg">
+  <svg class="mx-auto h-12 w-12 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+  </svg>
+  <h3 class="mt-2 text-sm font-semibold text-gray-900">All matched!</h3>
+  <p class="mt-1 text-sm text-gray-500">All sell transactions have been matched to parcels.</p>
+</div>
+{% endif %}
+{% endblock %}

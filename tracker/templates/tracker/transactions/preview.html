@@ -1,0 +1,96 @@
+{% extends "tracker/base.html" %}
+{% block title %}Preview Import - Tax Tracker{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+  <h1 class="text-2xl font-bold text-gray-900">Preview Import</h1>
+  <p class="mt-1 text-sm text-gray-500">Review parsed transactions before confirming.</p>
+</div>
+
+<!-- Summary stats -->
+<div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+  <div class="bg-white p-4 shadow rounded-lg text-center">
+    <div class="text-2xl font-bold text-gray-900">{{ preview.rows|length }}</div>
+    <div class="text-xs text-gray-500">Total Rows</div>
+  </div>
+  <div class="bg-white p-4 shadow rounded-lg text-center">
+    <div class="text-2xl font-bold text-green-600">{{ preview.new_count }}</div>
+    <div class="text-xs text-gray-500">New</div>
+  </div>
+  <div class="bg-white p-4 shadow rounded-lg text-center">
+    <div class="text-2xl font-bold text-yellow-600">{{ preview.duplicate_count }}</div>
+    <div class="text-xs text-gray-500">Duplicates (skipped)</div>
+  </div>
+  <div class="bg-white p-4 shadow rounded-lg text-center">
+    <div class="text-2xl font-bold text-red-600">{{ preview.error_count }}</div>
+    <div class="text-xs text-gray-500">Errors (skipped)</div>
+  </div>
+</div>
+
+<!-- Rows table -->
+<div class="bg-white shadow rounded-lg overflow-x-auto mb-6">
+  <table class="min-w-full divide-y divide-gray-200 text-sm">
+    <thead class="bg-gray-50">
+      <tr>
+        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">#</th>
+        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ticker</th>
+        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Qty</th>
+        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Price</th>
+        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Brokerage</th>
+        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total</th>
+        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Notes</th>
+      </tr>
+    </thead>
+    <tbody class="bg-white divide-y divide-gray-200">
+      {% for row in preview.rows %}
+      <tr class="{% if not row.is_valid %}bg-red-50{% elif row.row_number in preview.duplicate_row_numbers %}bg-yellow-50{% endif %}">
+        <td class="px-4 py-2 text-gray-500">{{ row.row_number }}</td>
+        <td class="px-4 py-2">
+          {% if not row.is_valid %}
+          <span class="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800">Error</span>
+          {% elif row.row_number in preview.duplicate_row_numbers %}
+          <span class="inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-800">Duplicate</span>
+          {% else %}
+          <span class="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">New</span>
+          {% endif %}
+        </td>
+        <td class="px-4 py-2">{{ row.trade_date }}</td>
+        <td class="px-4 py-2">
+          <span class="{% if row.transaction_type == 'BUY' %}text-green-700{% else %}text-red-700{% endif %} font-medium">
+            {{ row.transaction_type }}
+          </span>
+        </td>
+        <td class="px-4 py-2 font-medium">{{ row.ticker }}</td>
+        <td class="px-4 py-2 text-right">{{ row.quantity }}</td>
+        <td class="px-4 py-2 text-right">{{ row.unit_price }}</td>
+        <td class="px-4 py-2 text-right">{{ row.brokerage }}</td>
+        <td class="px-4 py-2 text-right">{{ row.total_value }}</td>
+        <td class="px-4 py-2 text-xs text-red-600">
+          {% for err in row.errors %}{{ err }}{% if not forloop.last %}, {% endif %}{% endfor %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Actions -->
+<div class="flex gap-3">
+  {% if preview.new_count > 0 %}
+  <form method="post">
+    {% csrf_token %}
+    <button type="submit"
+            class="inline-flex items-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500">
+      Confirm Import ({{ preview.new_count }} transaction{{ preview.new_count|pluralize }})
+    </button>
+  </form>
+  {% endif %}
+  <a href="{% url 'tracker:csv_upload' %}"
+     class="inline-flex items-center rounded-md bg-white px-4 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50">
+    Start Over
+  </a>
+</div>
+{% endblock %}

@@ -1,0 +1,86 @@
+{% extends "tracker/base.html" %}
+{% block title %}Parcels - Tax Tracker{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+  <h1 class="text-2xl font-bold text-gray-900">Parcels</h1>
+  <p class="mt-1 text-sm text-gray-500">All buy-side parcels and their matching status.</p>
+</div>
+
+<!-- Filters -->
+<div class="bg-white shadow rounded-lg p-4 mb-6">
+  <form method="get" class="flex flex-wrap gap-4 items-end">
+    <div>
+      <label for="security" class="block text-xs font-medium text-gray-500 uppercase">Security</label>
+      <select name="security" id="security" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500 py-1.5 pl-3 pr-8">
+        <option value="">All</option>
+        {% for sec in securities %}
+        <option value="{{ sec.ticker }}" {% if current_security == sec.ticker %}selected{% endif %}>{{ sec.ticker }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="status" class="block text-xs font-medium text-gray-500 uppercase">Status</label>
+      <select name="status" id="status" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500 py-1.5 pl-3 pr-8">
+        <option value="">All</option>
+        <option value="unmatched" {% if current_status == "unmatched" %}selected{% endif %}>Unmatched</option>
+        <option value="matched" {% if current_status == "matched" %}selected{% endif %}>Fully Matched</option>
+      </select>
+    </div>
+    <div>
+      <button type="submit" class="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500">
+        Filter
+      </button>
+      <a href="{% url 'tracker:parcel_list' %}" class="ml-2 text-sm text-gray-500 hover:text-gray-700">Reset</a>
+    </div>
+  </form>
+</div>
+
+{% if parcels %}
+<div class="bg-white shadow rounded-lg overflow-x-auto">
+  <table class="min-w-full divide-y divide-gray-200 text-sm">
+    <thead class="bg-gray-50">
+      <tr>
+        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Security</th>
+        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Acquisition Date</th>
+        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Original Qty</th>
+        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Remaining</th>
+        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Cost/Unit (AUD)</th>
+        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total Cost Base</th>
+        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
+        <th class="px-4 py-3"></th>
+      </tr>
+    </thead>
+    <tbody class="bg-white divide-y divide-gray-200">
+      {% for parcel in parcels %}
+      <tr class="hover:bg-gray-50">
+        <td class="px-4 py-3 whitespace-nowrap font-medium text-gray-900">{{ parcel.security.ticker }}</td>
+        <td class="px-4 py-3 whitespace-nowrap">{{ parcel.acquisition_date }}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-right">{{ parcel.original_quantity }}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-right">{{ parcel.remaining_quantity }}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-right">${{ parcel.cost_per_unit_aud|floatformat:4 }}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-right font-medium">${{ parcel.total_cost_base_aud|floatformat:2 }}</td>
+        <td class="px-4 py-3 whitespace-nowrap text-center">
+          {% if parcel.is_fully_matched %}
+          <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-green-100 text-green-800">Matched</span>
+          {% elif parcel.remaining_quantity < parcel.original_quantity %}
+          <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800">Partial</span>
+          {% else %}
+          <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-blue-100 text-blue-800">Available</span>
+          {% endif %}
+        </td>
+        <td class="px-4 py-3 whitespace-nowrap text-right">
+          <a href="{% url 'tracker:parcel_detail' parcel.pk %}" class="text-indigo-600 hover:text-indigo-500 text-sm">View</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="text-center py-12 bg-white shadow rounded-lg">
+  <h3 class="mt-2 text-sm font-semibold text-gray-900">No parcels yet</h3>
+  <p class="mt-1 text-sm text-gray-500">Parcels are created when you import BUY transactions.</p>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,26 @@
+{% if parcels %}
+<div class="overflow-x-auto">
+  <table class="min-w-full divide-y divide-gray-200 text-sm">
+    <thead class="bg-gray-50">
+      <tr>
+        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Acquisition Date</th>
+        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Remaining Qty</th>
+        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Cost/Unit (AUD)</th>
+        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Total Cost Base</th>
+      </tr>
+    </thead>
+    <tbody class="bg-white divide-y divide-gray-200">
+      {% for parcel in parcels %}
+      <tr>
+        <td class="px-3 py-2 whitespace-nowrap">{{ parcel.acquisition_date }}</td>
+        <td class="px-3 py-2 whitespace-nowrap text-right">{{ parcel.remaining_quantity }}</td>
+        <td class="px-3 py-2 whitespace-nowrap text-right">${{ parcel.cost_per_unit_aud|floatformat:4 }}</td>
+        <td class="px-3 py-2 whitespace-nowrap text-right">${{ parcel.total_cost_base_aud|floatformat:2 }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="text-sm text-gray-500 py-2">No available parcels for this security.</p>
+{% endif %}

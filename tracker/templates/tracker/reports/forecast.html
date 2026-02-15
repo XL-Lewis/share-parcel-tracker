@@ -1,0 +1,82 @@
+{% extends "tracker/base.html" %}
+{% block title %}CGT Forecast - Tax Tracker{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+  <h1 class="text-2xl font-bold text-gray-900">CGT Forecast</h1>
+  <p class="mt-1 text-sm text-gray-500">
+    Simulate a hypothetical sell to compare CGT outcomes across FIFO, LIFO, and optimal strategies.
+  </p>
+</div>
+
+<!-- Forecast form -->
+<div class="bg-white shadow rounded-lg p-6 mb-6">
+  <form hx-get="{% url 'tracker:forecast_results' %}"
+        hx-target="#forecast-results"
+        hx-indicator="#forecast-spinner"
+        class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5 items-end">
+    <div>
+      <label for="security" class="block text-sm font-medium text-gray-700 mb-1">Security</label>
+      <select name="security" id="security" required
+              class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm py-2 px-3 border">
+        <option value="">-- Select --</option>
+        {% for sec in securities %}
+        <option value="{{ sec.pk }}">{{ sec.ticker }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div>
+      <label for="quantity" class="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
+      <input type="number" name="quantity" id="quantity" step="any" min="0.00000001" required
+             placeholder="e.g. 100"
+             class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm py-2 px-3 border">
+    </div>
+
+    <div>
+      <label for="sell_price" class="block text-sm font-medium text-gray-700 mb-1">Sell Price (AUD)</label>
+      <input type="number" name="sell_price" id="sell_price" step="any" min="0.01" required
+             placeholder="e.g. 55.00"
+             class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm py-2 px-3 border">
+    </div>
+
+    <div>
+      <label for="sell_date" class="block text-sm font-medium text-gray-700 mb-1">Sell Date</label>
+      <input type="date" name="sell_date" id="sell_date"
+             class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm py-2 px-3 border">
+      <p class="mt-1 text-xs text-gray-400">Leave blank for today</p>
+    </div>
+
+    <div>
+      <button type="submit"
+              class="w-full inline-flex justify-center items-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500">
+        <span id="forecast-spinner" class="htmx-indicator mr-2">
+          <svg class="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+          </svg>
+        </span>
+        Run Forecast
+      </button>
+    </div>
+  </form>
+</div>
+
+{% if not securities %}
+<div class="text-center py-12 bg-white shadow rounded-lg">
+  <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+  </svg>
+  <h3 class="mt-2 text-sm font-semibold text-gray-900">No holdings to forecast</h3>
+  <p class="mt-1 text-sm text-gray-500">Import buy transactions first to use the forecasting tool.</p>
+  <div class="mt-6">
+    <a href="{% url 'tracker:csv_upload' %}" class="inline-flex items-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500">
+      Import CSV
+    </a>
+  </div>
+</div>
+{% endif %}
+
+<!-- Results container (loaded via HTMX) -->
+<div id="forecast-results"></div>
+{% endblock %}
